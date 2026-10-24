@@ -1,0 +1,26 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# marimo
+.marimo/
+
+# Data & outputs (large / generated / privacy-relevant) — never commit raw data
+data/*
+!data/.gitkeep
+results/*
+!results/.gitkeep
+
+# Private planning notes (internal to-do docs, not part of the public analysis)
+docs/*.html
