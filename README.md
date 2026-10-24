@@ -44,8 +44,10 @@ demonstrated on it — so this validates that federated learning works with
 *classical* ML, not just neural networks. It trains in seconds, so the whole
 regime comparison iterates fast.
 
-**Cross-check — ChemProp (GNN).** The same federated harness run with a graph neural network on a reduced endpoint set (at least one binary + one regression),
-to test whether the FL conclusion depends on model class.
+**Optional stretch — ChemProp (GNN).** Kept out of the core scope for now, but
+the harness is designed so a graph neural network can drop in later on a reduced
+endpoint set (one binary + one regression) to test whether the FL conclusion
+depends on model class. Add if time allows.
 
 ## Method
 
