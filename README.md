@@ -29,12 +29,15 @@ Three training regimes, same model family, same public datasets:
 | **Federated (FL)** | Local training, only weight updates shared, FedAvg aggregation | Numbers indicate privacy-preserved breadth — reaches chemistry no partner could see alone |
 | **Centralized-oracle** | All data pooled into one table | The theoretical upper bound — best possible quality, privacy impossible |
 
+Four endpoints are binary classification (toxicity); ESOL is a continuous
+regression target — so the pipeline is exercised on both task types.
+
 ## Method
 
 ### Pipeline
 
 ```
-                 Public ADMET data (e.g. Tox21, Ames, ClinTox, hERG)
+                 Public ADMET data (Tox21 · Ames · ClinTox · hERG + ESOL)
                                    │
                                    ▼  scaffold split → never-touched held-out set
                          split remaining into 3–4 non-IID "partner" silos
