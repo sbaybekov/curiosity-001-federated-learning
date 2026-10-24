@@ -63,7 +63,7 @@ depends on model class. Add if time allows.
       │ Partner  A │   │ Partner  B │   │ Partner  C │  ...   │ Server │
       │ local QC ──┼──►│ local QC ──┼──►│ local QC   │        │ FedAvg │
       │ train model│   │ train model│   │ train model│◄───────┤(no data)│
-      │  ↑ heads   │   │  ↑ heads   │   │  ↑ heads   │        │        │
+      │  ↑ weights │   │  ↑ weights │   │  ↑ weights │        │        │
       └─────┬──────┘   └─────┬──────┘   └─────┬──────┘        └────────┘
             └─── only weight updates travel — raw molecules never leave
                                    │
@@ -82,11 +82,10 @@ depends on model class. Add if time allows.
 | **Chemical-space coverage** | Accuracy vs. distance to nearest training molecule (Tanimoto), on off-silo scaffolds | FL broadens the applicability domain beyond isolated |
 | **Performance** | PR-AUC / RMSE per endpoint, with confidence intervals | FL ≈ centralized > isolated, most on sparse endpoints |
 | **Training time** | Wall-clock of full run; client compute vs. communication | FL is slower — the honest cost of privacy |
-| **Inference latency** | Time per prediction on the shared model | Identical — federation is free at inference |
 
 The thesis, stated plainly: *FL trades training wall-time for
 privacy-preserving breadth* — it reaches chemistry a single partner could never
-have access to, at zero inference cost.
+have access to.
 
 ---
 
