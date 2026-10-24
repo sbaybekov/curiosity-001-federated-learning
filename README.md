@@ -21,7 +21,7 @@ and breadth vs. engineering and training cost) is what this project measures.
 
 ## The comparison
 
-Three training regimes, same model family, same public datasets:
+Three training regimes, same public datasets:
 
 | Regime | What happens to the data | What you get back |
 |---|---|---|
@@ -29,15 +29,30 @@ Three training regimes, same model family, same public datasets:
 | **Federated (FL)** | Local training, only weight updates shared, FedAvg aggregation | Numbers indicate privacy-preserved breadth — reaches chemistry no partner could see alone |
 | **Centralized-oracle** | All data pooled into one table | The theoretical upper bound — best possible quality, privacy impossible |
 
-Four endpoints are binary classification (toxicity); ESOL is a continuous
-regression target — so the pipeline is exercised on both task types.
+Endpoints are split evenly between task types:
+- **Binary classification:** Ames, hERG (mutagenicity / hERG-cardiotoxicity)
+- **Continuous regression:** ESOL (aqueous solubility), LogP (lipophilicity)
+
+So the pipeline is exercised on both task types, two endpoints each.
+
+## Models
+
+**Primary — fingerprint + linear model.** ECFP/Morgan fingerprints feed
+logistic regression (binary endpoints) and linear regression (regression
+endpoints). Logistic regression is the canonical federated learner — FedAvg was
+demonstrated on it — so this validates that federated learning works with
+*classical* ML, not just neural networks. It trains in seconds, so the whole
+regime comparison iterates fast.
+
+**Cross-check — ChemProp (GNN).** The same federated harness run with a graph neural network on a reduced endpoint set (at least one binary + one regression),
+to test whether the FL conclusion depends on model class.
 
 ## Method
 
 ### Pipeline
 
 ```
-                 Public ADMET data (Tox21 · Ames · ClinTox · hERG + ESOL)
+                 Public ADMET data (Ames · hERG · ESOL · LogP)
                                    │
                                    ▼  scaffold split → never-touched held-out set
                          split remaining into 3–4 non-IID "partner" silos
@@ -45,7 +60,7 @@ regression target — so the pipeline is exercised on both task types.
       ┌────────────┐   ┌────────────┐   ┌────────────┐        ┌────────┐
       │ Partner  A │   │ Partner  B │   │ Partner  C │  ...   │ Server │
       │ local QC ──┼──►│ local QC ──┼──►│ local QC   │        │ FedAvg │
-      │ train GNN  │   │ train GNN  │   │ train GNN  │◄───────┤(no data)│
+      │ train model│   │ train model│   │ train model│◄───────┤(no data)│
       │  ↑ heads   │   │  ↑ heads   │   │  ↑ heads   │        │        │
       └─────┬──────┘   └─────┬──────┘   └─────┬──────┘        └────────┘
             └─── only weight updates travel — raw molecules never leave
