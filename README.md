@@ -31,7 +31,7 @@ Three training regimes, same public datasets:
 
 Endpoints are split evenly between task types:
 - **Binary classification:** Ames, hERG (mutagenicity / hERG-cardiotoxicity)
-- **Continuous regression:** ESOL (aqueous solubility), LogP (lipophilicity)
+- **Continuous regression:** Solubility (AqSolDB — aqueous logS), LogP (lipophilicity)
 
 So the pipeline is exercised on both task types, two endpoints each.
 
@@ -54,7 +54,7 @@ depends on model class. Add if time allows.
 ### Pipeline
 
 ```
-                 Public ADMET data (Ames · hERG · ESOL · LogP)
+                 Public ADMET data (Ames · hERG · Solubility · LogP)
                                    │
                                    ▼  scaffold split → never-touched held-out set
                          split remaining into 3–4 non-IID "partner" silos
@@ -106,8 +106,25 @@ Python 3.12 is pinned via `uv`; all dependencies live in a project-local
 virtualenv.
 
 ```bash
-uv sync                 # create .venv + install core deps
-uv run marimo edit notebooks   # launch the analysis environment
+bash scripts/setup_env.sh         # uv sync + dependency/version check (logged)
+uv run marimo edit notebooks      # launch the analysis environment
+```
+
+The full walkthrough — stage-by-stage commands, expected log lines,
+troubleshooting — lives in **`docs/RUNBOOK.md`**. Pipeline stages map to
+`scripts/` one-to-one:
+
+| Stage | Script | Produces |
+|---|---|---|
+| 1 · data & silos | `download_data.py` | raw CSVs, split parquets, silos |
+| 2 · validation & QC | `run_validation.py` | verdicts, QC report, overlap table, `pytest` |
+| 3a · baselines | `run_models.py` | isolated + centralized metrics |
+| 3b · federated loop | `run_federated.py` | federated weights + per-round history |
+| 4 · benchmark | `benchmark.py` | money plot, coverage table, summary |
+| 5 · privacy audit | `privacy_probe.py` | membership-inference before/after DP |
+
+```bash
+bash scripts/run_all.sh          # everything, in order, stop on first error
 ```
 
 > Notebook tooling: [marimo](https://marimo.io) — reactive Python notebooks,

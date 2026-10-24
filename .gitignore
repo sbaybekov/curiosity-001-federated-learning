@@ -15,6 +15,7 @@ __pycache__/
 
 # marimo
 .marimo/
+notebooks/__marimo__/
 
 # Data & outputs (large / generated / privacy-relevant) — never commit raw data
 data/*
@@ -24,3 +25,4 @@ results/*
 
 # Private planning notes (internal to-do docs, not part of the public analysis)
 docs/*.html
+docs/personal/

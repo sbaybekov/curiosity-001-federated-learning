@@ -1,0 +1,39 @@
+# FedMol — experiment configuration (hydra-compatible layout).
+# Loaded by every script via fedlearn.config.resolve_config(); the resolved
+# config is echoed to the log and snapshotted into the run manifest.
+#
+# Layout mirrors docs/fedmol_plan_report.html: one pipeline, three regimes.
+
+data:
+  raw_dir: data/raw
+  processed_dir: data/processed
+  endpoints: [ames, herg, solubility, logp]   # cls = Ames, hERG | reg = Solubility (AqSolDB), LogP
+  heldout_frac: 0.2                    # scaffold-based, never-touched test set
+
+silos:
+  n_partners: 3                        # simulated pharma partners
+  mode: scaffold                       # non-IID by Murcko scaffold
+  seed: 42
+
+model:
+  nbits: 2048                          # Morgan fingerprint width
+  radius: 2                            # Morgan radius
+  epochs_per_round: 3                  # local SGD epochs per FL round
+  lr: 0.01                             # local SGD learning rate
+  reg_penalty: 0.0001                   # L2 penalty in local SGD
+
+fl:
+  rounds: 20                           # FedAvg communication rounds
+  backend: flower                      # "flower" (primary) | "manual" (fallback)
+  fraction_fit: 1.0                    # fraction of partners selected per round
+  seed: 42
+
+eval:
+  bootstrap_reps: 1000                 # confidence-interval replications
+  coverage_bins: [0.0, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+
+privacy:
+  enabled: false
+  clip_C: 1.0                          # flat L2 clip per client update
+  noise_multiplier: 1.1                # z = sigma / C  (Gaussian)
+  delta: 1.0e-5
