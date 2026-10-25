@@ -14,10 +14,13 @@ cat .python-version | sed 's/^/  python pinned: /'
 
 echo ""
 echo "$BANNER"
-echo "  SETUP 2/3 — uv sync (installs rdkit, flwr[simulation], hydra, mlflow, pytdc)"
+echo "  SETUP 2/3 — uv venv + pip install (rdkit, flwr[simulation], hydra, mlflow, pytdc)"
 echo "              first run downloads ~1-2 GB of wheels (rdkit + ray). Be patient."
+echo "              project is installed NON-editable (managed=false) — the editable"
+echo "              .pth link is unreliable on macOS, producing 'No module named fedlearn'."
 echo "$BANNER"
-uv sync
+uv venv 2>/dev/null || true
+uv pip install .
 
 echo ""
 echo "$BANNER"

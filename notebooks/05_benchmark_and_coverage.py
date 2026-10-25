@@ -10,6 +10,19 @@ def _():
 
 
 @app.cell
+def _():
+    # consolidated imports — every name used below is defined here, once
+    import json
+    from pathlib import Path
+
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    from fedlearn.config import METRICS_DIR, TASK
+    return METRICS_DIR, Path, TASK, json, pd, plt
+
+
+@app.cell
 def _(mo):
     mo.md(
         """
@@ -32,14 +45,7 @@ endpoint with bootstrap CIs, plus the chemical-space coverage comparison
 
 
 @app.cell
-def _(mo):
-    import json
-    from pathlib import Path
-
-    import pandas as pd
-
-    from fedlearn.config import METRICS_DIR, RESULTS_DIR
-
+def _(METRICS_DIR, Path, json, pd):
     regime_metrics = {}
     for path in sorted(Path(METRICS_DIR).glob("regime_*.json")):
         with open(path) as fh:
@@ -60,23 +66,19 @@ def _(mo):
 
 
 @app.cell
-def _(mo, df):
-    import matplotlib.pyplot as plt
-
-    from fedlearn.config import TASK
-
+def _(TASK, df, mo, plt):
     colors = {"isolated": "#c96442", "federated": "#4a7a4a", "centralized": "#4a6a9a"}
-    eps = sorted(df["endpoint"].unique())
-    fig, axes = plt.subplots(1, len(eps), figsize=(13, 3.8))
-    for ax, ep in zip(axes, eps):
-        sub = df[df["endpoint"] == ep]
+    endpoints = sorted(df["endpoint"].unique())
+    fig, axes = plt.subplots(1, len(endpoints), figsize=(13, 3.8))
+    for ax, endpoint in zip(axes, endpoints):
+        sub = df[df["endpoint"] == endpoint]
         x = range(len(sub))
         ax.bar(list(x), sub["value"], yerr=[sub["value"] - sub["lo"],
                                             sub["hi"] - sub["value"]],
                capsize=5, color=[colors[r] for r in sub["regime"]])
         ax.set_xticks(list(x))
         ax.set_xticklabels(sub["regime"])
-        ax.set_title(f"{ep} ({'PR-AUC' if TASK[ep] == 'cls' else 'RMSE'}) · lower RMSE better")
+        ax.set_title(f"{endpoint} ({'PR-AUC' if TASK[endpoint] == 'cls' else 'RMSE'}) · lower RMSE better")
     fig.suptitle("isolated vs federated vs centralized-oracle (held-out)", fontsize=12)
     plt.tight_layout()
     mo.mpl.interactive(fig)
@@ -98,3 +100,7 @@ def _(mo):
         """
     )
     return
+
+
+if __name__ == "__main__":
+    app.run()

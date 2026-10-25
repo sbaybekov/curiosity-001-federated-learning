@@ -10,6 +10,23 @@ def _():
 
 
 @app.cell
+def _():
+    # consolidated imports — every name used below is defined here, once
+    import json
+    from pathlib import Path
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from fedlearn.config import FIGURES_DIR, METRICS_DIR, MODELS_DIR, RUNS_DIR, resolve_config
+    from fedlearn.data.partitions import load_partitions
+    from fedlearn.eval.evaluate import state_metrics
+    from fedlearn.fl.server import run_federated
+    return (FIGURES_DIR, METRICS_DIR, MODELS_DIR, RUNS_DIR, Path, json,
+            load_partitions, np, plt, resolve_config, run_federated, state_metrics)
+
+
+@app.cell
 def _(mo):
     mo.md(
         """
@@ -40,16 +57,8 @@ def _(mo):
 
 
 @app.cell
-def _(mo, rounds, run_button):
-    import json
-
-    import numpy as np
-
-    from fedlearn.config import MODELS_DIR, RUNS_DIR, resolve_config
-    from fedlearn.data.partitions import load_partitions
-    from fedlearn.eval.evaluate import state_metrics
-    from fedlearn.fl.server import run_federated
-
+def _(METRICS_DIR, MODELS_DIR, RUNS_DIR, json, load_partitions, np,
+      resolve_config, run_button, run_federated, rounds, state_metrics):
     # optional interactive trainer — writes the SAME artifacts as
     # scripts/run_federated.py; skip it if you ran the script (view cell below)
     if run_button.value:
@@ -67,8 +76,8 @@ def _(mo, rounds, run_button):
         metrics = state_metrics(result["final_state"], parts["dims"],
                                 parts["eval_data"]["X"], parts["eval_data"]["y"],
                                 config, f"federated[{result['backend']}]")
-        (__import__("pathlib").Path("results/metrics/regime_federated.json")
-         .write_text(json.dumps({"federated": metrics}, indent=2)))
+        (METRICS_DIR / "regime_federated.json").write_text(
+            json.dumps({"federated": metrics}, indent=2))
         print(f"done via backend={result['backend']} — see log above for per-round loss")
     else:
         print("press ▶ above to train in-notebook (or run scripts/run_federated.py)")
@@ -76,17 +85,10 @@ def _(mo, rounds, run_button):
 
 
 @app.cell
-def _(mo):
-    import json
-    from pathlib import Path
-
-    import matplotlib.pyplot as plt
-
-    from fedlearn.config import RUNS_DIR
-
+def _(FIGURES_DIR, RUNS_DIR, Path, json, mo, plt):
     # view-only: plots the per-round history written by the script OR the
     # run-button cell above — no training happens here
-    path = Path(RUNS_DIR) / "fed_history.jsonl"
+    path = RUNS_DIR / "fed_history.jsonl"
     if not path.exists():
         print("no fed_history.jsonl yet — run scripts/run_federated.py "
               "(or press ▶ above) once, then re-run this cell")
@@ -107,9 +109,13 @@ def _(mo):
         ax2.set_ylabel("wall time (s)")
         ax2.set_title("per-round cost → the timing dimension")
         plt.tight_layout()
-        fig.savefig("results/figures/04_convergence.png", dpi=120)
+        FIGURES_DIR.mkdir(parents=True, exist_ok=True)
+        fig.savefig(FIGURES_DIR / "04_convergence.png", dpi=120)
         print(f"convergence plot from {len(history)} rounds → "
-              f"results/figures/04_convergence.png")
+              f"{FIGURES_DIR / '04_convergence.png'}")
         mo.mpl.interactive(fig)
     return
 
+
+if __name__ == "__main__":
+    app.run()

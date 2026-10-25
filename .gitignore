@@ -22,6 +22,13 @@ data/*
 !data/.gitkeep
 results/*
 !results/.gitkeep
+# Committed so the README figures/tables render on GitHub — small, reproducible
+!results/figures/
+!results/figures/*.png
+!results/metrics/
+!results/metrics/*.json
+!results/umap_coverage.md
+!results/benchmark_summary.md
 
 # Private planning notes (internal to-do docs, not part of the public analysis)
 docs/*.html

@@ -24,6 +24,20 @@ from .client import LocalTrainer
 log = get_logger("fl.server")
 
 
+def round_lr(base: float, rnd: int, schedule: str = "invscale") -> float:
+    """Explicit per-round learning rate, shared by every backend.
+
+    ``invscale`` mirrors FedAvg-style annealing (eta0/√round) deterministically;
+    ``constant`` keeps lr fixed. Server drives this so sklearn's internal t_
+    heuristic never affects results — backend-identical and reproducible.
+    """
+    if schedule == "constant":
+        return float(base)
+    if schedule == "invscale":
+        return float(base) / float(rnd) ** 0.5
+    raise ValueError(f"unknown lr schedule: {schedule!r} (use 'constant'|'invscale')")
+
+
 def run_federated(config: dict, site_data: dict, eval_data: dict, task_map: dict) -> dict:
     """Top-level FedAvg entry used by scripts and notebooks.
 
@@ -68,6 +82,7 @@ def _run_manual(config, site_data, eval_data, cids, dims, task_map, state0, sett
     rounds = int(config["fl"]["rounds"])
     epochs = int(config["model"]["epochs_per_round"])
     lr = float(config["model"]["lr"])
+    schedule = str(config["model"].get("lr_schedule", "invscale"))
     seed = int(config["fl"]["seed"])
     rng = np.random.default_rng(seed + 1)
     trainers = {cid: LocalTrainer(dims, task_map, seed) for cid in cids}
@@ -78,10 +93,11 @@ def _run_manual(config, site_data, eval_data, cids, dims, task_map, state0, sett
         t0 = time.perf_counter()
         updates: list[np.ndarray] = []
         losses: dict[str, list[float]] = {ep: [] for ep in sorted(dims)}
+        round_lr_ = round_lr(lr, rnd, schedule)
         for cid in cids:
             tr = trainers[cid]
             tr.set_state(state)
-            local = tr.fit_round(site_data[cid]["X"], site_data[cid]["y"], epochs, lr)
+            local = tr.fit_round(site_data[cid]["X"], site_data[cid]["y"], epochs, round_lr_)
             for ep in sorted(dims):
                 losses[ep].append(local[ep])
             if settings.enabled:  # clip + noise BEFORE the update leaves the client
@@ -106,8 +122,8 @@ def _run_manual(config, site_data, eval_data, cids, dims, task_map, state0, sett
 # ---------------------------------------------------------------------------
 def _run_flower(config, site_data, eval_data, cids, dims, task_map, state0, settings) -> dict:
     import flwr
-    from flwr.client import ClientApp, NumPyClient as FlwrNumPyClient
-    from flwr.common import parameters_to_ndarrays
+    from flwr.client import NumPyClient as FlwrNumPyClient
+    from flwr.common import ndarrays_to_parameters, parameters_to_ndarrays
     from flwr.server import ServerConfig
     from flwr.server.strategy import FedAvg
     from flwr.simulation import start_simulation
@@ -117,6 +133,7 @@ def _run_flower(config, site_data, eval_data, cids, dims, task_map, state0, sett
     rounds = int(config["fl"]["rounds"])
     epochs = int(config["model"]["epochs_per_round"])
     lr = float(config["model"]["lr"])
+    schedule = str(config["model"].get("lr_schedule", "invscale"))
     seed = int(config["fl"]["seed"])
     log.info(f"backend: FLOWER {flwr.__version__} — in-process simulation, "
              f"{len(cids)} virtual clients, FedAvg strategy")
@@ -126,47 +143,79 @@ def _run_flower(config, site_data, eval_data, cids, dims, task_map, state0, sett
     class _FlowerClient(FlowerNumPyClient, FlwrNumPyClient):
         pass
 
-    holder: dict = {"state": None, "round": 0}
+    holder: dict = {"state": None, "round": 0, "history": []}
 
     class StashingFedAvg(FedAvg):
         def aggregate_fit(self, server_round, results, failures):
-            agg, metrics = super().aggregate_fit(server_round, results, failures)
-            if agg is not None:
-                state = np.concatenate([np.asarray(a, dtype=np.float32)
-                                        for a in parameters_to_ndarrays(agg)])
-                holder["state"], holder["round"] = state, server_round
-                log.info(f"  server round {server_round}: aggregated {len(results)} "
-                         f"updates → ‖state‖₂={np.linalg.norm(state):.3f}")
-            return agg, metrics
+            if not results:
+                return None, {}
+            # Plain MEAN of client states — identical to the manual reference
+            # loop. Flower's default FedAvg weights by num_examples, and since
+            # silos are unequal that would diverge from the manual baseline
+            # (and weight the whole 4-head vector by ONE endpoint's count).
+            states = [np.concatenate([np.asarray(p, dtype=np.float32)
+                                      for p in parameters_to_ndarrays(r.parameters)])
+                      for _, r in results]
+            state = np.mean(np.stack(states), axis=0).astype(np.float32)
+            holder["state"], holder["round"] = state, int(server_round)
+            # Reconstruct per-endpoint mean loss using the SAME schema as
+            # the manual loop, so fed_history.jsonl is backend-agnostic.
+            loss: dict[str, float] = {}
+            for ep in sorted(dims):
+                vals = [r.metrics[f"loss/{ep}"] for _, r in results
+                        if f"loss/{ep}" in r.metrics]
+                if vals:
+                    loss[ep] = float(np.mean(vals))
+            wall = [r.metrics["fit_time_s"] for _, r in results
+                    if "fit_time_s" in r.metrics]
+            holder["history"].append({
+                "round": int(server_round),
+                "loss": loss,
+                "wall_s": round(float(np.mean(wall)) if wall else 0.0, 3),
+            })
+            log.info(f"  server round {server_round}: averaged {len(results)} "
+                     f"updates → ‖state‖₂={np.linalg.norm(state):.3f}")
+            return ndarrays_to_parameters([state]), {}
 
-    def client_fn(cid: str):
-        data = site_data[cid]
-        client = _FlowerClient(LocalTrainer(dims, task_map, seed),
-                               data["X"], data["y"], None, str(cid))
+    def client_fn(cid):
+        # legacy simulation passes cid as an int (0..N-1); site_data is keyed
+        # "p0".."pN-1". Accept either spelling so the lookup is version-proof.
+        key = cid if cid in site_data else f"p{cid}"
+        data = site_data[key]
+        client = _FlowerClient(
+            LocalTrainer(dims, task_map, seed),
+            data["X"], data["y"],
+            (eval_data["X"], eval_data["y"]),   # shared held-out (eval only, never trained on)
+            str(key),
+        )
         return client.to_client() if hasattr(client, "to_client") else client
 
-    client_app = ClientApp(client_fn=client_fn)
-    # on_fit_config_fn is what actually carries epochs/lr to each client;
-    # without it FlowerNumPyClient.fit uses its own defaults (3 epochs, lr 0.01)
     strategy = StashingFedAvg(
         fraction_fit=float(config["fl"]["fraction_fit"]),
-        on_fit_config_fn=lambda rnd: {"epochs": epochs, "lr": lr},
+        initial_parameters=ndarrays_to_parameters([state0]),
+        on_fit_config_fn=lambda rnd: {
+            "epochs": epochs,
+            "lr": round_lr(lr, int(rnd), schedule),
+        },
     )
     server_config = ServerConfig(num_rounds=rounds)
 
-    # API drift between flwr releases: num_clients → num_supernodes
-    try:
-        start_simulation(client_app=client_app, num_supernodes=len(cids),
-                         config=server_config, strategy=strategy,
-                         backend_config={"init_args": {"num_cpus": 1}})
-    except TypeError:
-        log.info("  flwr API variant detected — retrying with num_clients=...")
-        start_simulation(client_app=client_app, num_clients=len(cids),
-                         config=server_config, strategy=strategy)
+    # flwr 1.42 routes start_simulation to the LEGACY app: it takes
+    # client_fn/num_clients (not the client_app/num_supernodes form). Any
+    # unsupported variant is caught by run_federated and falls back to the
+    # manual FedAvg loop (identical math).
+    start_simulation(
+        client_fn=client_fn,
+        num_clients=len(cids),
+        config=server_config,
+        strategy=strategy,
+        client_resources={"num_cpus": 1},
+    )
 
     state = holder["state"] if holder["state"] is not None else state0
-    log.info("flower run finished — final aggregated state recovered from strategy")
-    return _finish("flower", [], state, eval_data, dims, task_map)
+    log.info(f"flower run finished — {len(holder['history'])} rounds, "
+             f"final aggregated state recovered from strategy")
+    return _finish("flower", holder["history"], state, eval_data, dims, task_map)
 
 
 def _finish(backend, history, state, eval_data, dims, task_map) -> dict:

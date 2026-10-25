@@ -28,6 +28,11 @@ def validate_schema(df: pd.DataFrame, endpoint: str) -> dict:
     checks["has_required_columns"] = not missing
     if missing:
         log.error(f"  schema ✗ missing columns: {missing}")
+        verdict = all(checks.values())
+        for check, ok in checks.items():
+            summarize(f"schema[{check}]", "PASS" if ok else "FAIL", log)
+        summarize("schema verdict", "VALID" if verdict else "INVALID", log)
+        return {"valid": verdict, "checks": checks, "counts": counts}
 
     # 2. non-empty site
     checks["non_empty"] = len(df) > 0

@@ -18,7 +18,21 @@ log = get_logger("config")
 # --------------------------------------------------------------------------
 # Repo layout
 # --------------------------------------------------------------------------
-ROOT = Path(__file__).resolve().parents[3]
+def _repo_root() -> Path:
+    """Locate the repo root by its ``pyproject.toml`` marker.
+
+    Anchoring on the file (not on ``__file__`` parents) makes ROOT correct for
+    both editable (module in ``src/fedlearn``) and wheel (module in
+    ``site-packages/fedlearn``) installs. CWD is the repo root in the normal
+    marimo/script workflow; the ``__file__`` walk is a fallback.
+    """
+    for base in (Path.cwd().resolve(), *Path(__file__).resolve().parents):
+        if (base / "pyproject.toml").is_file():
+            return base
+    raise FileNotFoundError("could not locate repo root (no pyproject.toml found)")
+
+
+ROOT = _repo_root()
 DOCS_DIR = ROOT / "docs"
 DATA_DIR = ROOT / "data"
 RAW_DIR = DATA_DIR / "raw"

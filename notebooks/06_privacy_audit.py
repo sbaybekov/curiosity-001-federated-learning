@@ -10,6 +10,16 @@ def _():
 
 
 @app.cell
+def _():
+    # consolidated imports — every name used below is defined here, once
+    import json
+    from pathlib import Path
+
+    from fedlearn.config import RESULTS_DIR
+    return RESULTS_DIR, Path, json
+
+
+@app.cell
 def _(mo):
     mo.md(
         """
@@ -34,12 +44,7 @@ story: leakage shown, mitigation shown, both labeled.
 
 
 @app.cell
-def _(mo):
-    import json
-    from pathlib import Path
-
-    from fedlearn.config import RESULTS_DIR
-
+def _(RESULTS_DIR, Path, json):
     if Path(RESULTS_DIR / "privacy_audit.json").exists():
         with open(RESULTS_DIR / "privacy_audit.json") as fh:
             audit = json.load(fh)
@@ -70,3 +75,7 @@ terminal by `fedlearn.privacy.dp`.
         """
     )
     return
+
+
+if __name__ == "__main__":
+    app.run()

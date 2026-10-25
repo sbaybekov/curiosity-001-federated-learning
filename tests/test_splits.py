@@ -13,13 +13,14 @@ from fedlearn.data.split import _scaffold_split_impl, assign_silos, murcko_key
 # two aromatic families + one ringless: scaffolds are easy to reason about
 _BENZENOIDS = ["c1ccccc1", "Cc1ccccc1", "c1ccc(cc1)C", "c1ccc(cc1)CO"]
 _PYRIDINES = ["c1ccncc1", "Cc1ccncc1", "c1cc(ccn1)C"]
+_NAPHTHALENES = ["c1ccc2ccccc2c1", "Cc1cc2cccc2c1"]
 _ALKANES = ["CCC", "CCCC", "CCO"]
 
 
 def _df():
-    smiles = _BENZENOIDS + _PYRIDINES + _ALKANES
+    smiles = _BENZENOIDS + _PYRIDINES + _NAPHTHALENES + _ALKANES
     return pd.DataFrame({"unit_id": [f"m{i}" for i in range(len(smiles))],
-                         "smiles": smiles, "y": [1, 0] * (len(smiles) // 2) + [1]})
+                         "smiles": smiles, "y": [1, 0] * (len(smiles) // 2)})
 
 
 def test_ringless_molecules_have_empty_scaffold():

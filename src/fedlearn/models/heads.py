@@ -24,27 +24,53 @@ log = get_logger("models.heads")
 class LinearHead:
     """One linear model for one endpoint: cls (logistic) or reg (linear)."""
 
-    def __init__(self, task: str, dim: int, seed: int) -> None:
+    def __init__(self, task: str, dim: int, seed: int, lr_schedule: str = "invscaling") -> None:
         if task not in ("cls", "reg"):
             raise ValueError(f"task must be cls|reg, got {task}")
+        if lr_schedule not in ("constant", "invscaling"):
+            raise ValueError(f"lr_schedule must be constant|invscaling, got {lr_schedule}")
         self.task = task
         self.dim = int(dim)
-        kwargs = dict(random_state=seed)
+        self.lr_schedule = lr_schedule
         if task == "cls":
-            # logistic regression head (log_loss) — canonical FedAvg learner
+            # logistic regression head (log_loss) — canonical FedAvg learner.
+            # shuffle=False: fixed per-round data order so the local pass is
+            # backend-identical (sklearn's internal shuffle RNG advances with
+            # estimator lifetime, which differs between manual & Flower clients).
             self.est = SGDClassifier(
-                loss="log_loss", penalty="l2", average=False, **kwargs
+                loss="log_loss", penalty="l2", average=False,
+                random_state=seed, shuffle=False,
             )
         else:
             self.est = SGDRegressor(
-                loss="squared_error", penalty="l2", average=False, **kwargs
+                loss="squared_error", penalty="l2", average=False,
+                random_state=seed, shuffle=False,
             )
+        if lr_schedule == "constant":
+            # FL server drives lr per round (via eta0, set in partial_fit), so
+            # results are identical under any backend and independent of
+            # sklearn's internal t_ heuristic. Baselines keep the native
+            # per-sample "invscaling" schedule (sklearn default) instead, whose
+            # finer annealing suits regression (centralized RMSE recovers).
+            self.est.set_params(learning_rate="constant", eta0=0.01)
 
     # -- parameter hooks (the FL interface) -----------------------------------
     def get_parameters(self) -> OrderedDict:
+        # An estimator that has never been fit has no coef_/intercept_ yet.
+        # pack_heads() is called on freshly-initialized heads to derive the
+        # initial FedAvg state, so materialize a deterministic zero state.
+        if not hasattr(self.est, "coef_") or self.est.coef_ is None:
+            if self.task == "cls":
+                coef = np.zeros((1, self.dim), dtype=np.float32)  # (n_classes-1, K)
+            else:
+                coef = np.zeros((self.dim,), dtype=np.float32)
+            intercept = np.zeros((1,), dtype=np.float32)
+        else:
+            coef = self.est.coef_
+            intercept = self.est.intercept_
         params: OrderedDict = OrderedDict()
-        params["coef"] = np.asarray(self.est.coef_, dtype=np.float32).ravel().copy()
-        params["intercept"] = np.asarray(self.est.intercept_, dtype=np.float32).ravel().copy()
+        params["coef"] = np.asarray(coef, dtype=np.float32).ravel().copy()
+        params["intercept"] = np.asarray(intercept, dtype=np.float32).ravel().copy()
         return params
 
     def set_parameters(self, params: OrderedDict) -> None:
@@ -61,6 +87,8 @@ class LinearHead:
     # -- local training -------------------------------------------------------
     def partial_fit(self, X: np.ndarray, y: np.ndarray, epochs: int, lr: float) -> float:
         """Run ``epochs`` SGD passes starting from current weights; return final loss."""
+        if self.lr_schedule == "constant":
+            self.est.eta0 = float(lr)  # server drives lr per round
         for _ in range(epochs):
             if self.task == "cls":
                 self.est.partial_fit(X, y, classes=np.array([0, 1]))
@@ -83,11 +111,17 @@ class LinearHead:
         return self.est.predict(X).ravel()
 
 
-def init_heads(dims: dict[str, int], task_map: dict[str, str], seed: int) -> dict[str, LinearHead]:
-    """One fresh head per endpoint (all sites start from the same seed)."""
+def init_heads(dims: dict[str, int], task_map: dict[str, str], seed: int,
+               lr_schedule: str = "invscaling") -> dict[str, LinearHead]:
+    """One fresh head per endpoint (all sites start from the same seed).
+
+    lr_schedule: "invscaling" (sklearn per-sample decay, sklearn default) is
+    used by baseline training; "constant" is used by the FL server, which
+    drives lr per round via eta0 and must be independent of sklearn state.
+    """
     heads: dict[str, LinearHead] = {}
     for endpoint, dim in dims.items():
-        heads[endpoint] = LinearHead(task_map[endpoint], dim, seed)
+        heads[endpoint] = LinearHead(task_map[endpoint], dim, seed, lr_schedule)
     summarize(f"initialized heads for {sorted(heads)}", "", log)
     return heads
 

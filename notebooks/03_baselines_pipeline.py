@@ -10,6 +10,17 @@ def _():
 
 
 @app.cell
+def _():
+    # consolidated imports — every name used below is defined here, once
+    import json
+
+    import pandas as pd
+
+    from fedlearn.config import METRICS_DIR
+    return METRICS_DIR, json, pd
+
+
+@app.cell
 def _(mo):
     mo.md(
         """
@@ -45,11 +56,7 @@ This notebook then reads `results/metrics/regime_isolated.json` /
 
 
 @app.cell
-def _(mo):
-    import json
-
-    from fedlearn.config import METRICS_DIR
-
+def _(METRICS_DIR, json, pd):
     data = {}
     for name in ("regime_isolated.json", "regime_centralized.json"):
         with open(METRICS_DIR / name) as fh:
@@ -63,8 +70,6 @@ def _(mo):
             else:
                 rows.append({"regime": regime, "endpoint": ep, "metric": "RMSE",
                              "value": m["rmse"], "ci": f"[{m['rmse_lo']:.3f}–{m['rmse_hi']:.3f}]"})
-    import pandas as pd
-
     df = pd.DataFrame(rows)
     df["value"] = df["value"].round(3)
     df.pivot_table(index="endpoint", columns="regime", values="value", aggfunc="first")
@@ -82,3 +87,7 @@ these two tables. Centralized is your target to beat, not to match.
         """
     )
     return
+
+
+if __name__ == "__main__":
+    app.run()

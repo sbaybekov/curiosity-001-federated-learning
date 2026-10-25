@@ -89,6 +89,88 @@ have access to.
 
 ---
 
+## Results
+
+All figures are generated fresh by the pipeline scripts into `results/` and
+committed here so they render on GitHub.
+
+### Three-regime performance (held-out, scaffold-split test set)
+
+| Endpoint | Task | Isolated | Federated | Centralized-oracle |
+|---|---|---|---|---|
+| Ames | PR-AUC | 0.864 [0.841–0.890] | 0.900 [0.881–0.922] | **0.901** [0.883–0.923] |
+| hERG | PR-AUC | 0.797 [0.780–0.814] | 0.840 [0.825–0.854] | **0.840** [0.826–0.855] |
+| LogP | RMSE | 0.965 [0.912–1.017] | 0.892 [0.836–0.950] | **0.871** [0.817–0.926] |
+| Solubility | RMSE | 1.630 [1.541–1.720] | 1.580 [1.491–1.676] | **1.498** [1.415–1.589] |
+
+On every endpoint the ordering is exactly the expected one —
+**centralized ≥ federated ≥ isolated** (for RMSE, lower is better, so
+centralized ≤ federated ≤ isolated) — and federated realistically approaches
+the centralized-oracle while no partner ever saw another's chemistry.
+
+![Money plot — three regimes per endpoint](results/figures/money_plot.png)
+
+### Federated convergence
+
+Per-round ensemble loss for all four endpoints over the 20 FedAvg rounds —
+federated classification (Ames, hERG) converges smoothly with the round-based
+learning-rate schedule (no oscillation), and regression (LogP, Solubility) anneals
+monotonically:
+
+![Federated convergence curves](results/figures/04_convergence.png)
+
+### Chemical-space coverage per silo
+
+UMAP embedding of each endpoint's pooled fingerprint space, coloured by which
+partner's silo each molecule belongs to, with per-silo convex-hull overlays.
+Scaffolds are split scaffold-disjoint across silos (no scaffold appears in two
+silos), but distributed evenly rather than clustered by chemistry, so silos
+interleave across the whole space instead of owning segregated regions.
+
+| Endpoint | p0 share | p1 share | p2 share |
+|---|---|---|---|
+| Ames | 99.6% | 95.6% | 87.1% |
+| hERG | 85.0% | 95.6% | 91.8% |
+| Solubility | 88.7% | 88.5% | 86.7% |
+| LogP | 98.9% | 98.8% | 98.9% |
+
+(Share = silo hull area ÷ union hull area in UMAP space — a crude visual aid,
+not a rigorous diversity metric.)
+
+![Ames chemical space by silo](results/figures/umap_coverage_ames.png)
+![hERG chemical space by silo](results/figures/umap_coverage_herg.png)
+![Solubility chemical space by silo](results/figures/umap_coverage_solubility.png)
+![LogP chemical space by silo](results/figures/umap_coverage_logp.png)
+
+> Full machine-readable tables: `results/metrics/regime_*.json`,
+> `results/umap_coverage.md`, `results/benchmark_summary.md`.
+
+---
+
+## Study-project disclaimer
+
+This is a **personal study / learning project** — a labelled *curiosity*
+repository rather than a production-ready system. It is deliberately a
+scientific exercise on public data: it measures the *direction* of the
+FL-vs-baseline comparison, not deployable, shield-ready performance. Several
+sophistications a real-life project would apply are **out of scope here**:
+
+- **No cross-validation.** Endpoints use a single scaffold-based held-out split
+  with bootstrap CIs; there is no repeated k-fold, no external validation
+  cohort, and no held-out *partner* (every partner appears in training).
+- **One fixed training recipe.** A single learning-rate schedule, one
+  regularisation value, and one seed per endpoint — no hyperparameter sweep.
+- **A single model class** (ECFP + linear heads). No deep architectures, no
+  ensembling, no data augmentation.
+- **Simulated federation.** "Partners" are partitions of one public dataset;
+  there is no real multi-party deployment, no communication bandwidth/straggler
+  modelling, no production DP accounting beyond a membership-inference probe.
+
+The results are reproducible and internally consistent, but numbers here should
+be read as *signals and methodology*, not as benchmark-grade scores.
+
+---
+
 ## Repository layout
 
 ```

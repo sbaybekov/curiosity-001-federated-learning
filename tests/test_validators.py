@@ -56,10 +56,17 @@ def test_duplicate_ids_flagged():
 
 
 def test_near_duplicate_detected():
-    # benzene vs toluene share the aromatic ring → Tanimoto > 0.9 at small radius
-    dup, checked = near_duplicate_count(pd.Series(["c1ccccc1", "Cc1ccccc1", "O=C(O)c1ccccc1"]))
+    # stereoisomers are 2D-identical → Morgan Tanimoto = 1.0 (flagged as near-dup)
+    dup, checked = near_duplicate_count(pd.Series(["C/C=C/C", "C/C=C\\C", "CCO"]))
     assert checked > 0
     assert dup >= 1
+
+
+def test_distinct_molecules_not_flagged_as_near():
+    # a methyl group drops Morgan Tanimoto to ~0.27 — genuinely distinct
+    dup, checked = near_duplicate_count(pd.Series(["c1ccccc1", "Cc1ccccc1"]))
+    assert checked > 0
+    assert dup == 0
 
 
 def test_overlap_counts_shared_digests():

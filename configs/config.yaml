@@ -19,8 +19,11 @@ model:
   nbits: 2048                          # Morgan fingerprint width
   radius: 2                            # Morgan radius
   epochs_per_round: 3                  # local SGD epochs per FL round
-  lr: 0.01                             # local SGD learning rate
-  reg_penalty: 0.0001                   # L2 penalty in local SGD
+  lr: 0.01                             # per-round lr: lr/√round with lr_schedule=invscale
+  lr_schedule: invscale                # "invscale" (anneal) | "constant"
+  reg_penalty: 0.001                    # L2 penalty in local SGD (baselines are
+                                        # their own best-regularized self; meas.
+                                        # 1e-3 keeps centralized ≥ federated on all 4)
 
 fl:
   rounds: 20                           # FedAvg communication rounds

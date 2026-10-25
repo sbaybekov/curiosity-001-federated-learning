@@ -10,7 +10,6 @@ the same federation orchestration). ``get_parameters`` returns the flat state,
 from __future__ import annotations
 
 import time
-from collections import OrderedDict
 
 import numpy as np
 
@@ -25,8 +24,12 @@ class LocalTrainer:
 
     def __init__(self, dims: dict[str, int], task_map: dict[str, str], seed: int) -> None:
         self.dims = dims
-        self.heads = init_heads(dims, task_map, seed)
-        self.lens: OrderedDict = OrderedDict()
+        # constant schedule — FL server drives lr per round via eta0; must be
+        # independent of sklearn's t_ so manual & Flower clients match exactly.
+        self.heads = init_heads(dims, task_map, seed, lr_schedule="constant")
+        # lens must be known up front so set_state() works regardless of call
+        # order — Flower may call evaluate() before any get_state()/fit.
+        _, self.lens = pack_heads(self.heads)
 
     def set_state(self, state: np.ndarray) -> None:
         unpack_heads(state, self.lens, self.heads)
